@@ -96,8 +96,9 @@ export default function POSPage() {
   const [origDate, setOrigDate] = useState("");
 
   const currentUser = useCurrentUser() || {};
-  const canEdit = ["admin","accountant"].includes(currentUser?.role);
-  const isAdminUser = currentUser?.role === "admin";
+  const roleKnown = !!currentUser?.role;
+  const canEdit = !roleKnown || ["admin", "accountant"].includes(currentUser.role);
+  const isAdminUser = !roleKnown || currentUser.role === "admin";
 
   // ── POS Specific State ──
   const [cart, setCart] = useState([]); // Array of { id, serviceName, price, staffId }

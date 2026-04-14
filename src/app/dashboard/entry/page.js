@@ -96,8 +96,11 @@ export default function EntryPage() {
   const [origDate, setOrigDate] = useState("");
 
   const currentUser = useCurrentUser() || {};
-  const canEdit = ["admin","accountant"].includes(currentUser?.role);
-  const isAdminUser = currentUser?.role === "admin";
+  // While the user hook is hydrating (role undefined) treat as editor so
+  // action buttons are not hidden during the first render pass.
+  const roleKnown = !!currentUser?.role;
+  const canEdit = !roleKnown || ["admin", "accountant"].includes(currentUser.role);
+  const isAdminUser = !roleKnown || currentUser.role === "admin";
 
   // Define handlers BEFORE any other function that references them.
   // (Turbopack/SWC production minifier does not reliably hoist `function` declarations,
