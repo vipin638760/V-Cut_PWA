@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { collection, onSnapshot, query, orderBy, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/currentUser";
 import { INR } from "@/lib/calculations";
@@ -177,7 +177,7 @@ export default function EntryPage() {
       onSnapshot(collection(db, "branches"), sn => setBranches(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
       onSnapshot(collection(db, "staff"), sn => setStaff(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
       onSnapshot(collection(db, "staff_transfers"), sn => setTransfers(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(query(collection(db, "entries"), orderBy("date", "desc")), handleEntriesSn),
+      onSnapshot(query(collection(db, "entries"), orderBy("date", "desc"), limit(2000)), handleEntriesSn),
       onSnapshot(doc(db, "settings", "global"), sn => {
         if (sn.exists()) {
            const data = sn.data();
@@ -446,23 +446,20 @@ export default function EntryPage() {
     setSaving(false);
   };
 
-  const inPeriod = (dateStr) => {
-    if (!dateStr) return false;
-    if (filterMode === "month") return dateStr.startsWith(filterPrefix);
-    return dateStr.startsWith(String(filterYear));
-  };
+  const filteredEntries = useMemo(
+    () => entries.filter(e => e.date && (filterMode === "month" ? e.date.startsWith(filterPrefix) : e.date.startsWith(String(filterYear)))),
+    [entries, filterMode, filterPrefix, filterYear]
+  );
 
-  const filteredEntries = entries.filter(e => inPeriod(e.date));
-
-  // Compute visible recent entries based on view mode
+  // Compute visible recent entries based on view mode (memoized — avoids recompute on every keystroke)
   const activeRecentDate = recentDate || selDate;
-  const visibleEntries = (() => {
+  const visibleEntries = useMemo(() => {
     let list = filteredEntries;
     if (recentView === "branch" && selBranch) list = filteredEntries.filter(e => e.branch_id === selBranch);
     else if (recentView === "date") list = filteredEntries.filter(e => e.date === activeRecentDate);
     else if (recentView === "range" && rangeFrom && rangeTo) list = entries.filter(e => e.date >= rangeFrom && e.date <= rangeTo);
     return list;
-  })();
+  }, [filteredEntries, recentView, selBranch, activeRecentDate, rangeFrom, rangeTo, entries]);
 
   const exportToExcel = async () => {
     if (visibleEntries.length === 0) return;

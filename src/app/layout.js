@@ -30,6 +30,12 @@ export const metadata = {
   description: "Salon Management System",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${greatVibes.variable} ${spaceGrotesk.variable} ${manrope.variable} antialiased`}>

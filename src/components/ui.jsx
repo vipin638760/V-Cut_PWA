@@ -388,11 +388,65 @@ export function TabNav({ tabs, activeTab, onTabChange }) {
 }
 
 // ── Sidebar ──
-export function Sidebar({ children }) {
+// Hamburger-style: closed by default, slides in when `isOpen` is true.
+// `isPinned` keeps it locked open (desktop only — mobile always overlays).
+export function Sidebar({ children, isOpen, isPinned, onClose, isMobile }) {
+  const visible = isOpen || (isPinned && !isMobile);
   return (
-    <aside style={{ width: 260, height: "100vh", position: "fixed", left: 0, top: 0, background: "var(--bg2)", display: "flex", flexDirection: "column", zIndex: 50, padding: 0 }}>
-      {children}
-    </aside>
+    <>
+      {/* Backdrop — only when overlay (not pinned) */}
+      {visible && (!isPinned || isMobile) && (
+        <div onClick={onClose}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 49, transition: "opacity .2s" }} />
+      )}
+      <aside
+        style={{
+          width: 260, height: "100vh", position: "fixed", left: 0, top: 0,
+          background: "var(--bg2)", display: "flex", flexDirection: "column",
+          zIndex: 50, padding: 0,
+          transform: visible ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform .25s ease",
+          boxShadow: visible ? "4px 0 20px rgba(0,0,0,0.3)" : "none",
+        }}>
+        {children}
+      </aside>
+    </>
+  );
+}
+
+// Floating hamburger button — always visible
+export function SidebarToggle({ onClick, isOpen }) {
+  return (
+    <button onClick={onClick} title={isOpen ? "Close menu" : "Open menu"} aria-label="Toggle menu"
+      style={{
+        width: 40, height: 40, borderRadius: 10, display: "inline-flex", alignItems: "center", justifyContent: "center",
+        background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)",
+        cursor: "pointer", flexShrink: 0,
+      }}>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {isOpen ? (
+          <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
+        ) : (
+          <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+// Pin button (used inside the sidebar footer)
+export function SidebarPin({ pinned, onClick }) {
+  return (
+    <button onClick={onClick} title={pinned ? "Unpin sidebar" : "Pin sidebar (keep open)"}
+      style={{
+        width: 30, height: 30, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center",
+        background: pinned ? "var(--accent)" : "var(--bg4)", border: "1px solid var(--border)",
+        color: pinned ? "#000" : "var(--text2)", cursor: "pointer", flexShrink: 0, transition: "all .2s",
+      }}>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill={pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 17v5"/><path d="M9 10.76V6h6v4.76a2 2 0 0 0 .55 1.38l2.52 2.62a1 1 0 0 1-.72 1.74H5.65a1 1 0 0 1-.72-1.74l2.52-2.62A2 2 0 0 0 9 10.76z"/>
+      </svg>
+    </button>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Sidebar, SidebarItem, Icon, IconBtn, ThemeToggle, useConfirm } from "@/components/ui";
+import { Sidebar, SidebarItem, SidebarToggle, SidebarPin, Icon, IconBtn, ThemeToggle, useConfirm } from "@/components/ui";
 import SearchPalette from "@/components/SearchPalette";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -40,10 +40,41 @@ export default function DashboardLayout({ children }) {
   const [user, setUser] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [context, setContext] = useState({ branches: [], staff: [] });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   const router   = useRouter();
   const pathname = usePathname();
+
+  // Track viewport width for responsive layout
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Restore pin preference; default open on desktop only when pinned
+  useEffect(() => {
+    const pinned = localStorage.getItem("vcut_sidebar_pinned") === "1";
+    setSidebarPinned(pinned);
+  }, []);
+
+  const togglePin = () => {
+    setSidebarPinned(p => {
+      const next = !p;
+      localStorage.setItem("vcut_sidebar_pinned", next ? "1" : "0");
+      return next;
+    });
+  };
+
+  // Auto-close on route change when not pinned (or when on mobile)
+  useEffect(() => {
+    if (!sidebarPinned || isMobile) setSidebarOpen(false);
+  }, [pathname, sidebarPinned, isMobile]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vcut_user") || localStorage.getItem("vcut_user");
@@ -102,7 +133,7 @@ export default function DashboardLayout({ children }) {
 
 
       {/* ── Sidebar ── */}
-      <Sidebar>
+      <Sidebar isOpen={sidebarOpen} isPinned={sidebarPinned} isMobile={isMobile} onClose={() => setSidebarOpen(false)}>
         <div style={{ padding: "28px 20px 24px" }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, margin: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
             <span style={{ color: "var(--red)", fontFamily: "var(--font-vibes)", fontSize: "1.4em", fontWeight: 400 }}>V</span>
@@ -116,7 +147,10 @@ export default function DashboardLayout({ children }) {
             const isActive = activeTab === n.id || (n.id === "dashboard" && (activeTab === "" || activeTab === "dashboard"));
             return (
               <SidebarItem key={n.id} icon={n.icon} label={n.l} isActive={isActive}
-                onClick={() => router.push(n.id === "dashboard" ? "/dashboard" : `/dashboard/${n.id}`)} />
+                onClick={() => {
+                  router.push(n.id === "dashboard" ? "/dashboard" : `/dashboard/${n.id}`);
+                  if (!sidebarPinned || isMobile) setSidebarOpen(false);
+                }} />
             );
           })}
         </div>
@@ -129,36 +163,52 @@ export default function DashboardLayout({ children }) {
               <span style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1.5 }}>{user.role}</span>
             </div>
           </div>
+          {!isMobile && <SidebarPin pinned={sidebarPinned} onClick={togglePin} />}
           <IconBtn name="logout" onClick={handleLogout} variant="secondary" size={30} title="Logout" />
         </div>
       </Sidebar>
 
       {/* ── Main Content ── */}
-      <main style={{ marginLeft: 260, flex: 1, padding: "32px 48px", maxWidth: 1600, boxSizing: "border-box" }}>
+      <main style={{
+        marginLeft: sidebarPinned && !isMobile ? 260 : 0,
+        flex: 1,
+        padding: isMobile ? "16px 14px" : "32px 48px",
+        maxWidth: 1600,
+        width: "100%",
+        boxSizing: "border-box",
+        transition: "margin-left .25s ease",
+      }}>
         {/* Command Bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 36 }}>
-           <div onClick={() => setShowSearch(true)} style={{ position: "relative", width: 400, cursor: "text" }}>
-              <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text3)", opacity: 0.5 }}>
-                <Icon name="search" size={16} />
-              </div>
-              <div style={{ width: "100%", background: "var(--bg3)", borderRadius: 12, padding: "12px 16px 12px 44px", color: "var(--text3)", fontSize: 13, fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(72,72,71,0.1)" }}>
-                 Search...
-                 <div style={{ padding: "3px 7px", background: "var(--bg4)", borderRadius: 6, fontSize: 10, fontWeight: 700, color: "var(--text3)" }}>&#8984;K</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? 20 : 36, gap: 10, flexWrap: "wrap" }}>
+           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+              <SidebarToggle isOpen={sidebarOpen} onClick={() => setSidebarOpen(o => !o)} />
+              <div onClick={() => setShowSearch(true)} style={{ position: "relative", flex: 1, maxWidth: 400, minWidth: 0, cursor: "text" }}>
+                 <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text3)", opacity: 0.5 }}>
+                   <Icon name="search" size={16} />
+                 </div>
+                 <div style={{ width: "100%", background: "var(--bg3)", borderRadius: 12, padding: "12px 16px 12px 44px", color: "var(--text3)", fontSize: 13, fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid rgba(72,72,71,0.1)", boxSizing: "border-box" }}>
+                    Search...
+                    <div style={{ padding: "3px 7px", background: "var(--bg4)", borderRadius: 6, fontSize: 10, fontWeight: 700, color: "var(--text3)" }}>&#8984;K</div>
+                 </div>
               </div>
            </div>
 
-           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ textAlign: "right", lineHeight: 1.2 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 1.5 }}>{greeting}</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", fontFamily: "var(--font-headline, var(--font-outfit))", marginTop: 2 }}>
-                  {firstName}
-                  <span style={{ color: "var(--accent)", marginLeft: 4 }}>👋</span>
+           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 12, flexWrap: "wrap" }}>
+              {!isMobile && (
+                <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 1.5 }}>{greeting}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", fontFamily: "var(--font-headline, var(--font-outfit))", marginTop: 2 }}>
+                    {firstName}
+                    <span style={{ color: "var(--accent)", marginLeft: 4 }}>👋</span>
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(74,222,128,0.04)", padding: "10px 14px", borderRadius: 10 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
-                <span style={{ fontSize: 10, color: "var(--green)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Online</span>
-              </div>
+              )}
+              {!isMobile && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(74,222,128,0.04)", padding: "10px 14px", borderRadius: 10 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
+                  <span style={{ fontSize: 10, color: "var(--green)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Online</span>
+                </div>
+              )}
 
               <ThemeToggle size={34} />
               <IconBtn name="plus" variant="primary" title="New Entry" onClick={() => router.push("/dashboard/entry")} size={34} />
