@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── Toast Notification Hook ──
 export function useToast() {
@@ -161,9 +161,30 @@ export function Pill({ label, color = "gold" }) {
 
 // Card — uses surface hierarchy, no hard borders
 export function Card({ children, style }) {
+  const ref = useRef(null);
+  const [overflow, setOverflow] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    el.addEventListener("scroll", check, { passive: true });
+    return () => { ro.disconnect(); el.removeEventListener("scroll", check); };
+  }, [children]);
+
   return (
-    <div style={{ background: "var(--bg3)", borderRadius: 16, overflowX: "auto", marginBottom: 0, border: "1px solid rgba(72,72,71,0.12)", ...style }}>
-      {children}
+    <div style={{ position: "relative" }}>
+      <div ref={ref} style={{ background: "var(--bg3)", borderRadius: 16, overflowX: "auto", marginBottom: 0, border: "1px solid rgba(72,72,71,0.12)", ...style }}>
+        {children}
+      </div>
+      {overflow && (
+        <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, color: "var(--text3)", textAlign: "right", textTransform: "uppercase", letterSpacing: 0.8, opacity: 0.75 }}>
+          ← Scroll horizontally — more data hidden →
+        </div>
+      )}
     </div>
   );
 }

@@ -100,6 +100,7 @@ export default function EntryPage() {
   // action buttons are not hidden during the first render pass.
   const roleKnown = !!currentUser?.role;
   const canEdit = !roleKnown || ["admin", "accountant"].includes(currentUser.role);
+  const canDelete = !roleKnown || currentUser.role === "admin";
 
   // Define handlers BEFORE any other function that references them.
   // (Turbopack/SWC production minifier does not reliably hoist `function` declarations,
@@ -1322,7 +1323,7 @@ export default function EntryPage() {
               <TH right>Other Out</TH>
               <TH right>Cash in Hand</TH>
               <TH right>Def / Exc</TH>
-              <TH right>Actions</TH>
+              <TH right sticky style={{ minWidth: 130 }}>Actions</TH>
             </tr>
           </thead>
           <tbody>
@@ -1356,11 +1357,11 @@ export default function EntryPage() {
                     title={e.cash_diff == null ? "Actual cash not recorded" : e.cash_diff === 0 ? "Match" : e.cash_diff > 0 ? `Excess ${INR(e.cash_diff)}` : `Deficit ${INR(Math.abs(e.cash_diff))}`}>
                     {e.cash_diff == null ? "—" : e.cash_diff === 0 ? "✓ Match" : e.cash_diff > 0 ? `▲ ${INR(e.cash_diff)}` : `▼ ${INR(Math.abs(e.cash_diff))}`}
                   </TD>
-                  <TD right>
+                  <TD right sticky style={{ minWidth: 130 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "nowrap" }}>
                       <IconBtn name="log" title="View log" variant="secondary" onClick={() => setLogView(e)} />
                       <IconBtn name="edit" title="Edit entry" variant="secondary" onClick={() => handleEdit(e)} />
-                      <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />
+                      {canDelete && <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />}
                     </div>
                   </TD>
                 </tr>
