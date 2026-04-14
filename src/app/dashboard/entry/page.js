@@ -99,6 +99,82 @@ export default function EntryPage() {
   const canEdit = ["admin","accountant"].includes(currentUser?.role);
   const isAdminUser = currentUser?.role === "admin";
 
+  // ── POS Specific State ──
+  const [cart, setCart] = useState([]); // Array of { id, serviceName, price, staffId }
+  const [activeCategory, setActiveCategory] = useState("Artistic Styling");
+  const [clientSearch, setClientSearch] = useState("");
+  const [viewMode, setViewMode] = useState("pos"); // "pos" | "history"
+
+  const LUXURY_MENU = {
+    "Artistic Styling": [
+      { id: "S1", name: "Signature Cut", price: 500, time: "45m", icon: "✂️" },
+      { id: "S2", name: "Artistic Fade", price: 700, time: "60m", icon: "📐" },
+      { id: "S3", name: "Styling Ritual", price: 300, time: "20m", icon: "💆" },
+    ],
+    "The Hair Spa": [
+      { id: "H1", name: "Ritual Wash", price: 600, time: "30m", icon: "🛁" },
+      { id: "H2", name: "Deep Nourishment", price: 1200, time: "60m", icon: "🌿" },
+      { id: "H3", name: "Scalp Therapy", price: 1500, time: "90m", icon: "🧖" },
+    ],
+    "Color Lab": [
+      { id: "C1", name: "Global Tint", price: 2500, time: "120m", icon: "🎨" },
+      { id: "C2", name: "Art Balayage", price: 4500, time: "180m", icon: "🖌️" },
+      { id: "C3", name: "Glossing", price: 1500, time: "60m", icon: "✨" },
+    ],
+    "Grooming Atelier": [
+      { id: "G1", name: "Precision Beard", price: 400, time: "30m", icon: "🪒" },
+      { id: "G2", name: "Head Shave", price: 600, time: "45m", icon: "🥚" },
+      { id: "G3", name: "Luxury Groom", price: 1200, time: "60m", icon: "👔" },
+    ],
+    "Dermacare Studio": [
+      { id: "D1", name: "Glow Facial", price: 1800, time: "60m", icon: "🧼" },
+      { id: "D2", name: "Therapeutic Skin", price: 3500, time: "90m", icon: "🔬" },
+    ]
+  };
+
+  const addToCart = (service) => {
+    const newItem = {
+      ...service,
+      cartId: Date.now() + Math.random(),
+      staffId: branchStaff[0]?.id || ""
+    };
+    setCart([...cart, newItem]);
+    
+    // Auto-update staff billing row
+    if (newItem.staffId) {
+      const currentBilling = staffRows[newItem.staffId]?.billing || 0;
+      updateStaffRow(newItem.staffId, "billing", currentBilling + service.price);
+    }
+    toast({ title: "Item Added", message: `${service.name} added to cart`, type: "success" });
+  };
+
+  const removeFromCart = (cartItem) => {
+    setCart(prev => prev.filter(item => item.cartId !== cartItem.cartId));
+    // DEDUCT from staff billing
+    if (cartItem.staffId) {
+      const currentBilling = staffRows[cartItem.staffId]?.billing || 0;
+      updateStaffRow(cartItem.staffId, "billing", Math.max(0, currentBilling - cartItem.price));
+    }
+  };
+
+  const updateCartStaff = (cartId, newStaffId) => {
+    setCart(prev => prev.map(item => {
+      if (item.cartId === cartId) {
+        // Transfer billing from old staff to new
+        if (item.staffId) {
+          const oldBill = staffRows[item.staffId]?.billing || 0;
+          updateStaffRow(item.staffId, "billing", Math.max(0, oldBill - item.price));
+        }
+        if (newStaffId) {
+          const newBill = staffRows[newStaffId]?.billing || 0;
+          updateStaffRow(newStaffId, "billing", newBill + item.price);
+        }
+        return { ...item, staffId: newStaffId };
+      }
+      return item;
+    }));
+  };
+
   const handleEntriesSn = (sn) => {
     const entriesList = sn.docs.map(d => ({ ...d.data(), id: d.id }));
     setEntries(entriesList);
@@ -1013,330 +1089,273 @@ export default function EntryPage() {
     } catch (err) { confirm({ title: "Upload Error", message: err.message, confirmText: "OK", cancelText: "Close", type: "danger", onConfirm: () => {} }); }
   };
 
-  const inp = { padding: "8px 10px", border: "2px solid var(--input-border)", borderRadius: 8, fontSize: 14, background: "var(--bg3)", color: "var(--text)", fontFamily: "var(--font-outfit)", width: 90, textAlign: "right", transition: "border .2s", outline: "none" };
-
   if (loading) return <div className="text-center text-[var(--gold)] p-10">Loading...</div>;
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: "var(--gold)", letterSpacing: 1 }}>Data Entry</div>
-      </div>
-
-      <PeriodWidget filterMode={filterMode} setFilterMode={setFilterMode} filterYear={filterYear} setFilterYear={setFilterYear} filterMonth={filterMonth} setFilterMonth={setFilterMonth} />
-
-      {/* Entry Form */}
-      <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "inset 0 2px 10px rgba(0,0,0,.2)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 10, borderBottom: "1px solid var(--border)", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold)", textTransform: "uppercase", letterSpacing: 1 }}>Daily Sales Entry</div>
-          {canEdit && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button type="button" onClick={() => setTemplatePicker(true)} title="Download upload template"
-                style={{ padding: "6px 14px", borderRadius: 8, background: "var(--bg4)", border: "1px solid var(--border2)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "var(--orange)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                <Icon name="save" size={13} /> Template
-              </button>
-              <label title="Upload entries from CSV/Excel" style={{ padding: "6px 14px", borderRadius: 8, background: "var(--bg4)", border: "1px solid var(--border2)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                <Icon name="plus" size={13} /> Upload
-                <input type="file" accept=".csv,.xls,.xlsx" onChange={handleUpload} style={{ display: "none" }} />
-              </label>
-            </div>
-          )}
+    <div style={{ height: "calc(100vh - 80px)", display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* ── TOP ACTION BAR ── */}
+      <div style={{ 
+        display: "flex", alignItems: "center", gap: 16, background: "var(--bg2)", padding: "12px 20px", 
+        borderRadius: 16, border: "1px solid var(--border)", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" 
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+          <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
+             <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--accent)", opacity: 0.6 }}>
+               <Icon name="search" size={16} />
+             </div>
+             <input 
+               type="text" 
+               placeholder="IDENTIFY CLIENT (NAME / PHONE)..." 
+               value={clientSearch}
+               onChange={e => setClientSearch(e.target.value)}
+               style={{ 
+                 width: "100%", padding: "12px 16px 12px 42px", borderRadius: 12, border: "none", 
+                 background: "var(--bg4)", color: "var(--text)", fontSize: 13, fontWeight: 700, 
+                 letterSpacing: 1, outline: "none", borderBottom: clientSearch ? "2px solid var(--accent)" : "2px solid transparent",
+                 transition: "all 0.3s"
+               }} 
+             />
+          </div>
+          <div style={{ width: 1, height: 24, background: "var(--border2)" }} />
+          <select 
+            value={selBranch} 
+            onChange={e => { setSelBranch(e.target.value); setStaffRows({}); setOnlineInc(""); setCart([]); }}
+            style={{ 
+              background: "transparent", border: "none", color: "var(--gold)", fontWeight: 800, 
+              fontSize: 14, outline: "none", cursor: "pointer", textTransform: "uppercase" 
+            }}>
+            <option value="">SWITCH BRANCH...</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
         </div>
 
-        <form onSubmit={handleSave}>
-          {/* Branch + Date */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 16 }}>
-            <FG label="Branch">
-              <select value={selBranch} onChange={e => { setSelBranch(e.target.value); setStaffRows({}); setOnlineInc(""); setMatExp(""); setOtherExp(""); setPetrol(""); setEditId(null); if(!editId) setGstPct(globalGst); }}>
-                <option value="">Select branch...</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </FG>
-            <FG label="Date">
-              <input type="date" value={selDate} onChange={e => { setSelDate(e.target.value); setEditId(null); if(!editId) setGstPct(globalGst); }} />
-            </FG>
-            <FG label="Global GST (%)">
-              <div style={{ padding: "12px 16px", borderRadius: 10, border: "2px solid var(--border)", background: "var(--bg3)", color: "var(--red)", fontWeight: 700, fontSize: 14, fontFamily: "var(--font-outfit)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span>{gstPct}%</span>
-                <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 400, textTransform: "uppercase" }}>{editId ? "Historical" : "Master Sync"}</span>
-              </div>
-            </FG>
-          </div>
-
-          {selBranch && (
-            <>
-              {/* Income */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 16 }}>
-                <FG label="Online Income (₹)" income>
-                  <input type="number" placeholder="0" min="0" value={onlineInc} onChange={e => setOnlineInc(e.target.value)} title="Enter online portion — Cash auto-fills the remainder" />
-                </FG>
-                <FG label={`TOTAL GST @ ${gstPct}%`} expense>
-                  <input type="number" readOnly value={totalRowGst} style={{ background: "transparent", color: "var(--red)", cursor: "not-allowed", fontWeight: 700 }} title="Calculated on Online Income" />
-                </FG>
-                <FG label="Cash Income (₹)" income>
-                  <input type="number" readOnly value={totalCash} style={{ background: "transparent", color: "var(--green)", cursor: "not-allowed", fontWeight: 700 }} title="Auto-calculated: Total Sale − Online" />
-                </FG>
-                <FG label="Material Expense (₹)" expense><input type="number" placeholder="0" min="0" value={matExp} onChange={e => setMatExp(e.target.value)} /></FG>
-              </div>
-
-              {/* Staff Billing Table */}
-              <div style={{ height: 1, background: "linear-gradient(90deg,transparent,var(--border2),transparent)", margin: "16px 0" }} />
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 12, color: "var(--gold)", textTransform: "uppercase", letterSpacing: 1 }}>Staff Billing & Incentives</div>
-
-              {branchStaff.length > 0 ? (
-                <div style={{ overflowX: "auto", marginBottom: 16 }}>
-                  <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: "var(--bg4)" }}>
-                        {["Present", "Staff", "Billing (₹)", "Mat Sale", "Mat Inc (5%auto)", "Incentive", "Tips (₹)", "Tip In/Out", "Staff Total Inc", "Staff Total"].map((h, i) => (
-                          <th key={i} style={{ textAlign: i === 0 || i === 1 ? "left" : "right", padding: "10px 14px", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: 1, borderBottom: "2px solid var(--gold)", whiteSpace: "nowrap" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {branchStaff.map(s => {
-                        const r = staffRows[s.id] || {};
-                        const isPresent = r.present !== false; // default true
-                        const incPct = (s.incentive_pct ?? 10) / 100;
-                        const matInc = Math.round((r.material || 0) * 0.05);
-                        const inc = r.incentive !== undefined ? r.incentive : Math.round((r.billing || 0) * incPct);
-                        const staffTInc = inc + matInc + (r.tips || 0);
-                        const total = (r.billing || 0) + (r.material || 0) + (r.tips || 0);
-                        const tipIn = r.tip_in || "online";
-                        const tipPaid = r.tip_paid || "cash";
-                        const disabledStyle = !isPresent ? { opacity: 0.4, pointerEvents: "none" } : {};
-                        return (
-                          <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", transition: "background .15s", background: !isPresent ? "rgba(248,113,113,0.05)" : undefined }}>
-                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                              <input type="checkbox" checked={isPresent} onChange={e => handleAttendanceToggle(s, e.target.checked)} title={isPresent ? "Present (uncheck to record leave)" : "On leave"} style={{ width: 18, height: 18, accentColor: isPresent ? "var(--green)" : "var(--red)", cursor: "pointer" }} />
-                            </td>
-                            <td style={{ padding: "10px 14px", fontWeight: 600, fontSize: 13 }}>
-                              {s.name}
-                              <div style={{ fontSize: 10, color: "var(--text3)", fontWeight: 400, marginTop: 2 }}>
-                                {!isPresent ? <span style={{ color: "var(--red)", fontWeight: 700 }}>ON LEAVE ({r.leave_type || "Paid"}){r.leave_reason ? ` — ${r.leave_reason}` : ""}</span> : (s.role || "")}
-                              </div>
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", ...disabledStyle }}>
-                              <input type="number" placeholder="0" min="0" disabled={!isPresent} value={r.billing || ""} onChange={e => updateStaffRow(s.id, "billing", e.target.value)} style={{ ...inp, borderColor: "var(--green)" }} onFocus={e => e.target.style.borderColor = "var(--gold)"} onBlur={e => e.target.style.borderColor = "var(--green)"} />
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", ...disabledStyle }}>
-                              <input type="number" placeholder="0" min="0" disabled={!isPresent} value={r.material || ""} onChange={e => updateStaffRow(s.id, "material", e.target.value)} style={{ ...inp, borderColor: "var(--green)", color: "var(--green)", fontWeight: 600 }} onFocus={e => e.target.style.borderColor = "var(--gold)"} onBlur={e => e.target.style.borderColor = "var(--green)"} />
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right" }}>
-                              <input type="text" readOnly value={INR(matInc)} title="Auto-calculated (5%)" style={{ ...inp, borderColor: "var(--red)", background: "rgba(255,255,255,0.03)", color: "var(--red)", cursor: "not-allowed", fontWeight: 700 }} />
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right" }}>
-                              <input type="text" readOnly value={INR(inc)} title="Auto-calculated (Incentive %)" style={{ ...inp, borderColor: "var(--red)", background: "rgba(255,255,255,0.03)", color: "var(--red)", cursor: "not-allowed", fontWeight: 700 }} />
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", ...disabledStyle }}>
-                              <input type="number" placeholder="0" min="0" disabled={!isPresent} value={r.tips || ""} onChange={e => updateStaffRow(s.id, "tips", e.target.value)} style={{ ...inp, borderColor: "var(--red)", color: "var(--red)", fontWeight: 600 }} onFocus={e => e.target.style.borderColor = "var(--gold)"} onBlur={e => e.target.style.borderColor = "var(--red)"} />
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", ...disabledStyle }}>
-                              <div style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 11 }}>
-                                <select disabled={!isPresent} value={tipIn} onChange={e => updateStaffRow(s.id, "tip_in", e.target.value)} title="Tip received as" style={{ padding: "4px 6px", borderRadius: 6, background: "var(--bg3)", border: "1px solid var(--border2)", color: "var(--text2)", fontSize: 11 }}>
-                                  <option value="online">In: Online</option>
-                                  <option value="cash">In: Cash</option>
-                                </select>
-                                <span style={{ color: "var(--text3)" }}>→</span>
-                                <select disabled={!isPresent} value={tipPaid} onChange={e => updateStaffRow(s.id, "tip_paid", e.target.value)} title="Tip paid to staff as" style={{ padding: "4px 6px", borderRadius: 6, background: "var(--bg3)", border: "1px solid var(--border2)", color: "var(--text2)", fontSize: 11 }}>
-                                  <option value="cash">Out: Cash</option>
-                                  <option value="online">Out: Online</option>
-                                </select>
-                              </div>
-                            </td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", fontWeight: 700, color: "var(--gold)" }}>{INR(staffTInc)}</td>
-                            <td style={{ padding: "6px 14px", textAlign: "right", fontWeight: 700, color: "var(--text2)" }}>{INR(total)}</td>
-                          </tr>
-                        );
-                      })}
-                      {/* Totals row */}
-                      <tr style={{ background: "var(--bg3)", fontWeight: 700, color: "var(--gold)", borderTop: "2px solid var(--border2)" }}>
-                        <td style={{ padding: "10px 14px" }}></td>
-                        <td style={{ padding: "10px 14px" }}>TOTALS</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--green)" }}>{INR(totalBilling)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--green)" }}>{INR(totalMatSale)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text3)" }}></td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--red)" }}>{INR(totalIncentive - totalTips)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--red)" }}>{INR(totalTips)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text3)", fontSize: 10 }}>cash↑ {INR(tipsInCash)} • cash↓ {INR(tipsPaidCash)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--gold)" }}>{INR(totalStaffIncCombined)}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right" }}>{INR(totalBilling + totalMatSale + totalTips)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div style={{ color: "var(--text3)", fontSize: 13, marginBottom: 16 }}>No active staff in this branch for the selected date.</div>}
-
-              {/* Expenses */}
-              <div style={{ height: 1, background: "linear-gradient(90deg,transparent,var(--border2),transparent)", margin: "16px 0" }} />
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 16 }}>
-                <FG label="Other Expenses (₹)" expense><input type="number" placeholder="0" min="0" value={otherExp} onChange={e => setOtherExp(e.target.value)} /></FG>
-                <FG label="Petrol / Travel (₹)" expense><input type="number" placeholder="0" min="0" value={petrol} onChange={e => setPetrol(e.target.value)} /></FG>
-                <FG label="Cash in Hand (Expected)">
-                  <div style={{ padding: "12px 16px", borderRadius: 10, border: `2px solid ${cashInHand >= 0 ? "var(--green)" : "var(--red)"}`, background: "var(--bg3)", fontSize: 18, fontWeight: 700, color: cashInHand >= 0 ? "var(--green)" : "var(--red)" }}>{INR(cashInHand)}</div>
-                </FG>
-                <FG label="Actual Cash Counted (₹)">
-                  <input type="number" placeholder="leave blank to skip" min="0" value={actualCash} onChange={e => setActualCash(e.target.value)}
-                    style={cashDiff === null ? undefined : {
-                      borderColor: cashDiff === 0 ? "var(--green)" : cashDiff > 0 ? "var(--green)" : "var(--red)",
-                      color: cashDiff === 0 ? "var(--green)" : cashDiff > 0 ? "var(--green)" : "var(--red)",
-                      fontWeight: 700,
-                    }} />
-                </FG>
-              </div>
-
-              {/* Reconciliation banner */}
-              {actualCashNum !== null && (
-                <div style={{
-                  padding: "10px 16px", borderRadius: 10, marginBottom: 16,
-                  border: `2px solid ${cashDiff === 0 ? "var(--green)" : cashDiff < 0 ? "var(--red)" : "var(--orange, #fb923c)"}`,
-                  background: cashDiff === 0 ? "rgba(74,222,128,0.08)" : cashDiff < 0 ? "rgba(248,113,113,0.08)" : "rgba(251,146,60,0.08)",
-                  display: "flex", alignItems: "center", gap: 12, fontWeight: 700,
-                }}>
-                  <span style={{ fontSize: 18 }}>
-                    {cashDiff === 0 ? "✓" : cashDiff < 0 ? "▼" : "▲"}
-                  </span>
-                  <span style={{ color: cashDiff === 0 ? "var(--green)" : cashDiff < 0 ? "var(--red)" : "var(--orange, #fb923c)" }}>
-                    {cashDiff === 0
-                      ? `MATCH — actual cash equals expected (${INR(cashInHand)})`
-                      : cashDiff < 0
-                        ? `DEFICIT — short by ${INR(Math.abs(cashDiff))} (expected ${INR(cashInHand)}, counted ${INR(actualCashNum)})`
-                        : `EXCESS — over by ${INR(cashDiff)} (expected ${INR(cashInHand)}, counted ${INR(actualCashNum)})`}
-                  </span>
-                </div>
-              )}
-
-              {/* Save / Clear */}
-              <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16 }}>
-                <button type="submit" disabled={saving}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 24px", borderRadius: 10, fontSize: 14, fontWeight: 800, background: "linear-gradient(135deg,var(--gold),var(--gold2))", color: "#000", border: "none", cursor: "pointer", letterSpacing: 1, boxShadow: "0 4px 15px rgba(var(--gold-rgb),0.3)", opacity: saving ? 0.6 : 1 }}>
-                  <Icon name="save" size={16} />
-                  {saving ? "Saving..." : editId ? "Update Entry" : "Save to Database"}
-                </button>
-                <button type="button" onClick={() => { setSelBranch(""); setOnlineInc(""); setMatExp(""); setOtherExp(""); setPetrol(""); setStaffRows({}); setSaveStatus(""); setEditId(null); }}
-                  style={{ padding: "10px 18px", borderRadius: 10, fontSize: 13, background: "var(--bg4)", color: "var(--text2)", border: "1px solid var(--border2)", cursor: "pointer", fontWeight: 600 }}>
-                  {editId ? "Cancel Edit" : "Clear"}
-                </button>
-                {saveStatus && <span style={{ fontSize: 13, color: saveStatus.startsWith("✅") ? "var(--green)" : "var(--red)" }}>{saveStatus}</span>}
-              </div>
-            </>
-          )}
-        </form>
+        <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setViewMode("pos")} style={{
+              padding: "10px 16px", borderRadius: 10, fontSize: 11, fontWeight: 800, border: "none", cursor: "pointer",
+              background: viewMode === "pos" ? "var(--accent)" : "var(--bg4)", color: viewMode === "pos" ? "#000" : "var(--text3)",
+              textTransform: "uppercase", transition: "all .3s"
+            }}>Terminal</button>
+            <button onClick={() => setViewMode("history")} style={{
+              padding: "10px 16px", borderRadius: 10, fontSize: 11, fontWeight: 800, border: "none", cursor: "pointer",
+              background: viewMode === "history" ? "var(--accent)" : "var(--bg4)", color: viewMode === "history" ? "#000" : "var(--text3)",
+              textTransform: "uppercase", transition: "all .3s"
+            }}>History</button>
+        </div>
       </div>
 
-      {/* Recent Entries Table */}
-      <div style={{ margin: "20px 0 12px", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--gold)", letterSpacing: 1 }}>
-            Recent Entries — {visibleEntries.length} records
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {/* View toggles */}
-            <div style={{ display: "flex", gap: 3, background: "var(--bg4)", padding: 3, borderRadius: 10 }}>
-              {[
-                ["branch", selBranch ? (branchesById.get(selBranch)?.name?.replace("V-CUT ","") || "Branch") : "Branch"],
-                ["date", "Date"],
-                ["range", "Range"],
-                ["all", "All"]
-              ].map(([val, label]) => (
-                <button key={val} onClick={() => { setRecentView(val); if (val === "date" && !recentDate) setRecentDate(selDate); if (val === "range" && !rangeFrom) { setRangeFrom(selDate); setRangeTo(selDate); } }}
-                  style={{ padding: "5px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700, border: "none", cursor: "pointer", transition: "all .2s", textTransform: "uppercase", letterSpacing: 0.5, background: recentView === val ? "linear-gradient(135deg, var(--accent), var(--gold2))" : "transparent", color: recentView === val ? "#000" : "var(--text3)" }}>
-                  {label}
+      {viewMode === "pos" ? (
+        <div style={{ flex: 1, display: "flex", gap: 16, minHeight: 0 }}>
+          {/* ── LEFT: MENU GRID ── */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+            {/* Category Chips */}
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", padding: "4px 0", scrollbarWidth: "none" }}>
+              {Object.keys(LUXURY_MENU).map(cat => (
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveCategory(cat)}
+                  style={{
+                    padding: "10px 20px", borderRadius: "100px", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer",
+                    whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: 1,
+                    background: activeCategory === cat ? "var(--accent)" : "var(--bg3)",
+                    color: activeCategory === cat ? "#000" : "var(--text3)",
+                    boxShadow: activeCategory === cat ? "0 4px 15px rgba(var(--accent-rgb), 0.3)" : "none",
+                    transition: "all .3s"
+                  }}>
+                  {cat}
                 </button>
               ))}
             </div>
-            {/* Export */}
-            {canEdit && (
-              <button onClick={exportToExcel} title="Export to CSV"
-                style={{ padding: "5px 10px", borderRadius: 8, background: "var(--bg4)", border: "1px solid var(--border)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "var(--green)", textTransform: "uppercase" }}>
-                <Icon name="save" size={12} /> Export
+
+            {/* Service Grid */}
+            <div style={{ 
+              flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", 
+              gap: 16, paddingRight: 8, scrollbarWidth: "thin"
+            }}>
+              {LUXURY_MENU[activeCategory]?.map(service => (
+                <div 
+                  key={service.id} 
+                  onClick={() => addToCart(service)}
+                  style={{
+                    background: "var(--bg2)", borderRadius: 20, padding: 20, border: "1px solid var(--border)",
+                    cursor: "pointer", transition: "all .3s", position: "relative", overflow: "hidden",
+                    display: "flex", flexDirection: "column", gap: 12
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.borderColor = "var(--accent)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = "var(--border)"; }}>
+                  <div style={{ fontSize: 32 }}>{service.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>{service.name}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 900, color: "var(--accent)" }}>{INR(service.price)}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>{service.time}</div>
+                    </div>
+                  </div>
+                  {/* Subtle backlit effect */}
+                  <div style={{ position: "absolute", bottom: -20, right: -20, width: 80, height: 80, background: "var(--accent)", filter: "blur(40px)", opacity: 0.05 }} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── RIGHT: CART / CHECKOUT ── */}
+          <div style={{ 
+            width: 380, background: "var(--bg2)", borderRadius: 24, padding: 24, 
+            display: "flex", flexDirection: "column", gap: 20, border: "1px solid var(--border)",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.3)", position: "relative", overflow: "hidden"
+          }}>
+            {/* Backdrop Glow */}
+            <div style={{ position: "absolute", top: -100, right: -100, width: 300, height: 300, background: "var(--accent)", filter: "blur(120px)", opacity: 0.03, pointerEvents: "none" }} />
+            
+            <div style={{ fontSize: 16, fontWeight: 900, color: "var(--gold)", letterSpacing: 1.5, textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Order Summary</span>
+              <Icon name="grid" size={18} />
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 4 }}>
+              {cart.length === 0 ? (
+                <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, opacity: 0.3 }}>
+                   <Icon name="log" size={48} />
+                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Cart is Empty</div>
+                </div>
+              ) : cart.map((item) => (
+                <div key={item.cartId} style={{ background: "var(--bg3)", borderRadius: 16, padding: "16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{item.name}</div>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: "var(--accent)", marginTop: 2 }}>{INR(item.price)}</div>
+                    </div>
+                    <button onClick={() => removeFromCart(item)} style={{ background: "transparent", border: "none", color: "var(--red)", opacity: 0.6, cursor: "pointer" }}>
+                      <Icon name="del" size={14} />
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Assign Staff:</div>
+                    <select 
+                      value={item.staffId} 
+                      onChange={e => updateCartStaff(item.cartId, e.target.value)}
+                      style={{ 
+                        flex: 1, background: "var(--bg4)", border: "1px solid var(--border2)", borderRadius: 8,
+                        padding: "6px 8px", color: "var(--text2)", fontSize: 11, fontWeight: 600, outline: "none"
+                      }}>
+                      <option value="">Select Stylist...</option>
+                      {branchStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Financials */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid var(--border2)", paddingTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text3)", fontWeight: 600 }}>
+                 <span>Subtotal</span>
+                 <span style={{ color: "var(--text)" }}>{INR(totalBilling + totalMatSale)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text3)", fontWeight: 600 }}>
+                 <span>GST (5%)</span>
+                 <span style={{ color: "var(--red)" }}>{INR(totalRowGst)}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                 <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, display: "block", marginBottom: 4, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Online</label>
+                    <input 
+                      type="number" 
+                      value={onlineInc} 
+                      onChange={e => setOnlineInc(e.target.value)}
+                      style={{ width: "100%", background: "var(--bg4)", border: "1px solid var(--border2)", borderRadius: 10, padding: 10, fontSize: 14, fontWeight: 800, color: "var(--accent)" }}
+                    />
+                 </div>
+                 <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, display: "block", marginBottom: 4, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Cash</label>
+                    <input 
+                      type="number" 
+                      readOnly
+                      value={totalCash} 
+                      style={{ width: "100%", background: "var(--bg3)", border: "none", borderRadius: 10, padding: 10, fontSize: 14, fontWeight: 800, color: "var(--green)", opacity: 0.8 }}
+                    />
+                 </div>
+              </div>
+
+              <div style={{ marginTop: 16, padding: "20px", background: "linear-gradient(135deg, var(--bg4), var(--bg3))", borderRadius: 20, textAlign: "center", border: "1px solid rgba(255,255,255,0.03)" }}>
+                 <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Total Receivable</div>
+                 <div style={{ fontSize: 36, fontWeight: 900, color: "var(--gold)", letterSpacing: -1 }}>{INR(totalBilling + totalMatSale + totalTips)}</div>
+              </div>
+
+              <button 
+                disabled={saving || cart.length === 0}
+                onClick={handleSave}
+                style={{
+                  width: "100%", padding: "18px", borderRadius: 16, border: "none", fontSize: 14, fontWeight: 900, 
+                  background: "linear-gradient(135deg, var(--accent), var(--gold2))", color: "#000",
+                  cursor: "pointer", textTransform: "uppercase", letterSpacing: 1.5,
+                  boxShadow: "0 10px 30px rgba(var(--accent-rgb), 0.3)", transition: "all .3s"
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                {saving ? "SETTLING..." : "SETTLE & PRINT"}
               </button>
-            )}
+            </div>
           </div>
         </div>
-        {/* Date / Range pickers */}
-        {recentView === "date" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600 }}>Date:</span>
-            <input type="date" value={activeRecentDate} onChange={e => setRecentDate(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg4)", color: "var(--text)", fontSize: 12, fontWeight: 600 }} />
-          </div>
-        )}
-        {recentView === "range" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600 }}>From:</span>
-            <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg4)", color: "var(--text)", fontSize: 12, fontWeight: 600 }} />
-            <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600 }}>To:</span>
-            <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg4)", color: "var(--text)", fontSize: 12, fontWeight: 600 }} />
-          </div>
-        )}
-      </div>
-      <Card>
-        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 12.5 }}>
-          <thead>
-            <tr>
-              <TH>Date</TH><TH>Branch</TH>
-              <TH right>Online</TH><TH right>Cash</TH>
-              <TH right>GST</TH>
-              <TH right>Mat Sale</TH><TH right>Total Billing</TH><TH right>Incentive</TH>
-              <TH right>Tips</TH>
-              <TH right>Staff T.Inc</TH><TH right>Staff T.Sale</TH>
-              <TH right>Other Out</TH>
-              <TH right>Cash in Hand</TH>
-              <TH right>Def / Exc</TH>
-              <TH right>Actions</TH>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleEntries.slice(0, 30).map(e => {
-              const b = branchesById.get(e.branch_id);
-              const agg = sumStaffBilling(e.staff_billing);
-              const totalBillingE = agg.billing;
-              const totalMatE = agg.material;
-              const totalIncE = agg.incentive;
-              const totalTipsE = agg.tips;
-              const staffTotalIncE = agg.staffTotalInc;
-              const staffTotalSaleE = totalBillingE + totalMatE + totalTipsE;
-              const totalOthE = (e.others || 0) + (e.petrol || 0);
-              const cih = e.cash_in_hand !== undefined ? e.cash_in_hand : (e.cash || 0) - totalIncE - totalTipsE - (e.others || 0);
-              return (
-                <tr key={e.id}>
-                  <TD style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{e.date}</TD>
-                  <TD style={{ fontWeight: 500, fontSize: 12 }}>{b ? b.name.replace("V-CUT ", "") : "?"}</TD>
-                  <TD right style={{ color: "var(--green)" }}>{INR(e.online || 0)}</TD>
-                  <TD right style={{ color: "var(--green)" }}>{INR(e.cash || 0)}</TD>
-                  <TD right style={{ color: "var(--red)" }}>{INR(e.total_gst || 0)}</TD>
-                  <TD right style={{ color: "var(--green)" }}>{INR(totalMatE)}</TD>
-                  <TD right style={{ fontWeight: 600, color: "var(--green)" }}>{INR(totalBillingE)}</TD>
-                  <TD right style={{ color: "var(--red)" }}>{INR(totalIncE)}</TD>
-                  <TD right style={{ color: "var(--red)" }}>{INR(totalTipsE)}</TD>
-                  <TD right style={{ color: "var(--gold)", fontWeight: 700 }}>{INR(staffTotalIncE)}</TD>
-                  <TD right style={{ color: "var(--text2)", fontWeight: 700 }}>{INR(staffTotalSaleE)}</TD>
-                  <TD right style={{ color: "var(--red)" }}>{INR(totalOthE)}</TD>
-                  <TD right style={{ fontWeight: 700, color: cih >= 0 ? "var(--green)" : "var(--red)" }}>{INR(cih)}</TD>
-                  <TD right style={{ fontWeight: 700, color: e.cash_diff == null ? "var(--text3)" : e.cash_diff === 0 ? "var(--green)" : e.cash_diff > 0 ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}
-                    title={e.cash_diff == null ? "Actual cash not recorded" : e.cash_diff === 0 ? "Match" : e.cash_diff > 0 ? `Excess ${INR(e.cash_diff)}` : `Deficit ${INR(Math.abs(e.cash_diff))}`}>
-                    {e.cash_diff == null ? "—" : e.cash_diff === 0 ? "✓ Match" : e.cash_diff > 0 ? `▲ ${INR(e.cash_diff)}` : `▼ ${INR(Math.abs(e.cash_diff))}`}
-                  </TD>
-                  <TD right>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
-                      <IconBtn name="log" title="View log" variant="secondary" onClick={() => setLogView(e)} />
-                      {canEdit && <IconBtn name="edit" title="Edit entry" variant="secondary" onClick={() => handleEdit(e)} />}
-                      {isAdminUser && <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />}
-                    </div>
-                  </TD>
-                </tr>
-              );
-            })}
-            {filteredEntries.length === 0 && (
-              <tr><td colSpan={15} style={{ textAlign: "center", padding: 24, color: "var(--text3)" }}>No entries for this period</td></tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      ) : (
+        <div style={{ flex: 1, overflowY: "auto" }}>
+           <PeriodWidget filterMode={filterMode} setFilterMode={setFilterMode} filterYear={filterYear} setFilterYear={setFilterYear} filterMonth={filterMonth} setFilterMonth={setFilterMonth} />
+           <div style={{ marginTop: 16 }}>
+             <Card>
+                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 12.5 }}>
+                  <thead>
+                    <tr>
+                      <TH>Date</TH><TH>Branch</TH>
+                      <TH right>Online</TH><TH right>Cash</TH>
+                      <TH right>GST</TH>
+                      <TH right>Mat Sale</TH><TH right>Total Billing</TH><TH right>Incentive</TH>
+                      <TH right>Tips</TH>
+                      <TH right>Staff T.Inc</TH><TH right>Staff T.Sale</TH>
+                      <TH right>Other Out</TH>
+                      <TH right>Cash in Hand</TH>
+                      <TH right>Def / Exc</TH>
+                      <TH right>Actions</TH>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleEntries.slice(0, 30).map(e => {
+                      const b = branchesById.get(e.branch_id);
+                      const agg = sumStaffBilling(e.staff_billing);
+                      const cih = e.cash_in_hand !== undefined ? e.cash_in_hand : (e.cash || 0) - agg.incentive - agg.tips - (e.others || 0);
+                      return (
+                        <tr key={e.id}>
+                          <TD style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{e.date}</TD>
+                          <TD style={{ fontWeight: 500, fontSize: 12 }}>{b ? b.name.replace("V-CUT ", "") : "?"}</TD>
+                          <TD right style={{ color: "var(--green)" }}>{INR(e.online || 0)}</TD>
+                          <TD right style={{ color: "var(--green)" }}>{INR(e.cash || 0)}</TD>
+                          <TD right style={{ color: "var(--red)" }}>{INR(e.total_gst || 0)}</TD>
+                          <TD right style={{ color: "var(--green)" }}>{INR(agg.material)}</TD>
+                          <TD right style={{ fontWeight: 600, color: "var(--green)" }}>{INR(agg.billing)}</TD>
+                          <TD right style={{ color: "var(--red)" }}>{INR(agg.incentive)}</TD>
+                          <TD right style={{ color: "var(--red)" }}>{INR(agg.tips)}</TD>
+                          <TD right style={{ color: "var(--gold)", fontWeight: 700 }}>{INR(agg.staffTotalInc)}</TD>
+                          <TD right style={{ color: "var(--text2)", fontWeight: 700 }}>{INR(agg.billing + agg.material + agg.tips)}</TD>
+                          <TD right style={{ color: "var(--red)" }}>{INR((e.others || 0) + (e.petrol || 0))}</TD>
+                          <TD right style={{ fontWeight: 700, color: cih >= 0 ? "var(--green)" : "var(--red)" }}>{INR(cih)}</TD>
+                          <TD right style={{ fontWeight: 700, color: e.cash_diff == null ? "var(--text3)" : e.cash_diff === 0 ? "var(--green)" : e.cash_diff > 0 ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>
+                            {e.cash_diff == null ? "—" : e.cash_diff === 0 ? "✓ Match" : e.cash_diff > 0 ? `▲ ${INR(e.cash_diff)}` : `▼ ${INR(Math.abs(e.cash_diff))}`}
+                          </TD>
+                          <TD right>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                              <IconBtn name="log" title="View log" variant="secondary" onClick={() => setLogView(e)} />
+                              {canEdit && <IconBtn name="edit" title="Edit entry" variant="secondary" onClick={() => { handleEdit(e); setViewMode("pos"); }} />}
+                              {isAdminUser && <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />}
+                            </div>
+                          </TD>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+             </Card>
+           </div>
+        </div>
+      )}
 
       {/* Audit Log Modal */}
       {logView && (
@@ -1347,7 +1366,6 @@ export default function EntryPage() {
             <div style={{ maxHeight: 400, overflowY: "auto", paddingRight: 10, display: "flex", flexDirection: "column", gap: 0 }}>
               {(logView.activity_log || []).slice().reverse().map((log, idx) => (
                 <div key={idx} style={{ display: "flex", gap: 16, position: "relative", paddingBottom: 24 }}>
-                  {/* Timeline dot and line */}
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                     <div style={{ width: 10, height: 10, borderRadius: "50%", background: log.action === "Create" ? "var(--green)" : "var(--gold)", marginTop: 4, zIndex: 1 }} />
                     {idx !== (logView.activity_log || []).length - 1 && (
@@ -1363,184 +1381,13 @@ export default function EntryPage() {
                   </div>
                 </div>
               ))}
-              {(!logView.activity_log || logView.activity_log.length === 0) && (
-                <div style={{ color: "var(--text3)", fontSize: 14, textAlign: "center", padding: 40, border: "2px dashed rgba(255,255,255,0.05)", borderRadius: 16 }}>No history records found.</div>
-              )}
-            </div>
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text3)" }}>
-              <span>REF: {logView.id.slice(0, 8)}</span>
-              <span style={{ color: "var(--red)", fontWeight: 700 }}>GST {logView.global_gst_pct || 0}%</span>
             </div>
           </div>
         </div>
       )}
-      {/* Upload Preview Modal */}
-      <Modal isOpen={!!uploadPreview} onClose={() => setUploadPreview(null)} title="Upload Preview" width={700}>
-        {uploadPreview && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Summary */}
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ flex: 1, padding: 12, borderRadius: 10, background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--green)" }}>{uploadPreview.validCount}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Valid</div>
-              </div>
-              <div style={{ flex: 1, padding: 12, borderRadius: 10, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--red)" }}>{uploadPreview.errorCount}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Errors</div>
-              </div>
-              <div style={{ flex: 1, padding: 12, borderRadius: 10, background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.2)", textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--accent)" }}>{uploadPreview.rows.length}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Total Rows</div>
-              </div>
-            </div>
 
-            {/* Preview Table */}
-            <div style={{ maxHeight: 350, overflowY: "auto", borderRadius: 10, border: "1px solid var(--border)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead>
-                  <tr style={{ background: "var(--bg4)", position: "sticky", top: 0 }}>
-                    <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>#</th>
-                    <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Status</th>
-                    <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Date</th>
-                    <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Branch</th>
-                    <th style={{ padding: "8px 10px", textAlign: "right", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Online</th>
-                    <th style={{ padding: "8px 10px", textAlign: "right", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Cash</th>
-                    <th style={{ padding: "8px 10px", textAlign: "right", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Billing</th>
-                    <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Issues</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadPreview.rows.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid rgba(72,72,71,0.08)", background: r.valid ? "transparent" : "rgba(248,113,113,0.04)" }}>
-                      <td style={{ padding: "8px 10px", color: "var(--text3)" }}>{r.row}</td>
-                      <td style={{ padding: "8px 10px" }}>
-                        {r.valid
-                          ? <span style={{ color: "var(--green)", fontWeight: 700, fontSize: 10 }}>✓ OK</span>
-                          : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: 10 }}>✗ ERROR</span>}
-                      </td>
-                      <td style={{ padding: "8px 10px", fontWeight: 600 }}>{r.date || "—"}</td>
-                      <td style={{ padding: "8px 10px", color: r.branch ? "var(--text2)" : "var(--red)", fontWeight: 600 }}>{r.branchName || "—"}</td>
-                      <td style={{ padding: "8px 10px", textAlign: "right", color: "var(--green)" }}>{INR(r.online)}</td>
-                      <td style={{ padding: "8px 10px", textAlign: "right", color: "var(--green)" }}>{INR(r.cash)}</td>
-                      <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600 }}>{INR(r.billing)}</td>
-                      <td style={{ padding: "8px 10px", fontSize: 10, color: "var(--red)", maxWidth: 200 }}>
-                        {r.errors.length > 0 ? r.errors.join("; ") : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={confirmUpload} disabled={uploadPreview.validCount === 0}
-                style={{ flex: 1, padding: "12px 0", borderRadius: 10, background: uploadPreview.validCount > 0 ? "linear-gradient(135deg, var(--green), #16a34a)" : "var(--bg4)", color: uploadPreview.validCount > 0 ? "#fff" : "var(--text3)", border: "none", fontWeight: 700, fontSize: 13, cursor: uploadPreview.validCount > 0 ? "pointer" : "not-allowed" }}>
-                Import {uploadPreview.validCount} Valid Entries
-              </button>
-              <button onClick={() => setUploadPreview(null)}
-                style={{ padding: "12px 20px", borderRadius: 10, background: "var(--bg4)", color: "var(--text3)", border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Template Format Picker */}
-      <Modal isOpen={templatePicker} onClose={() => setTemplatePicker(false)} title="Download Template" width={440}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 4 }}>Choose a template format:</p>
-
-          <button onClick={() => { setGeneratingTemplate(true); setTemplatePicker(false); requestAnimationFrame(() => requestAnimationFrame(() => downloadTemplate())); }}
-            style={{ padding: "16px 20px", borderRadius: 12, background: "var(--bg4)", border: "1px solid var(--border)", cursor: "pointer", textAlign: "left", transition: "all .2s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "var(--accent)"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Multi-Tab (Per Branch)</div>
-            <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5 }}>
-              Separate sheet for each branch with pre-filled staff names.<br/>
-              Best for daily entry — one date per sheet, staff billing inline.
-            </div>
-          </button>
-
-          <button onClick={() => { setGeneratingTemplate(true); setTemplatePicker(false); requestAnimationFrame(() => requestAnimationFrame(() => downloadFlatTemplate())); }}
-            style={{ padding: "16px 20px", borderRadius: 12, background: "var(--bg4)", border: "1px solid var(--border)", cursor: "pointer", textAlign: "left", transition: "all .2s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "var(--accent)"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Single-Tab (All in One)</div>
-            <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5 }}>
-              All branches and staff in one flat table — one row per staff.<br/>
-              Best for bulk entry — fill multiple dates at once.
-            </div>
-          </button>
-        </div>
-      </Modal>
-
-      {/* Template Generating Loader */}
-      {generatingTemplate && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", zIndex: 1500, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
-          <style>{`
-            @keyframes vPulse {
-              0%, 100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(240,100,100,0.6)); }
-              50% { transform: scale(1.15); filter: drop-shadow(0 0 40px rgba(240,100,100,0.9)); }
-            }
-            @keyframes vSpin {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-            @keyframes dots {
-              0%, 20% { opacity: 0.2; }
-              40% { opacity: 1; }
-              100% { opacity: 0.2; }
-            }
-          `}</style>
-          <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "3px solid transparent", borderTopColor: "#f06464", borderRightColor: "#22d3ee", animation: "vSpin 1.2s linear infinite" }} />
-            <div style={{ fontFamily: "var(--font-vibes), 'Brush Script MT', cursive", fontSize: 72, fontWeight: 400, color: "#f06464", lineHeight: 1, animation: "vPulse 1.5s ease-in-out infinite" }}>V</div>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)", letterSpacing: 2, textTransform: "uppercase" }}>
-            Generating Template
-            <span style={{ animation: "dots 1.4s infinite", animationDelay: "0s" }}>.</span>
-            <span style={{ animation: "dots 1.4s infinite", animationDelay: "0.2s" }}>.</span>
-            <span style={{ animation: "dots 1.4s infinite", animationDelay: "0.4s" }}>.</span>
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>Building sheets, formulas, and validations</div>
-        </div>
-      )}
-
-      {/* Leave Application Modal — opens when attendance is unchecked */}
-      <Modal isOpen={!!leavePrompt} onClose={() => setLeavePrompt(null)} title={`Leave Application — ${leavePrompt?.staff?.name || ""}`}>
-        {leavePrompt && (
-          <form onSubmit={(e) => { e.preventDefault(); confirmLeave(); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ background: "var(--bg4)", padding: 12, borderRadius: 10, fontSize: 12, color: "var(--text2)" }}>
-              Marking <strong>{leavePrompt.staff.name}</strong> absent on <strong>{selDate}</strong>.
-              Salary will pro-rate based on present days; paid-leave allowance is consumed first.
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Leave Type</label>
-              <select value={leavePrompt.type} onChange={e => setLeavePrompt({ ...leavePrompt, type: e.target.value })}
-                style={{ padding: "12px 16px", border: "2px solid var(--input-border)", borderRadius: 10, fontSize: 14, background: "var(--bg2)", color: "var(--text)" }}>
-                <option value="Paid">Paid Leave</option>
-                <option value="Unpaid">Unpaid Leave</option>
-                <option value="Sick Leave">Sick Leave</option>
-                <option value="Casual">Casual Leave</option>
-              </select>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Reason (optional)</label>
-              <input value={leavePrompt.reason} onChange={e => setLeavePrompt({ ...leavePrompt, reason: e.target.value })} placeholder="e.g. Personal emergency"
-                style={{ padding: "12px 16px", border: "2px solid var(--input-border)", borderRadius: 10, fontSize: 14, background: "var(--bg2)", color: "var(--text)" }} />
-            </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-              <button type="submit" style={{ flex: 1, padding: "14px", borderRadius: 12, background: "var(--accent)", color: "#000", border: "none", fontWeight: 800, cursor: "pointer" }}>Record Leave</button>
-              <button type="button" onClick={() => setLeavePrompt(null)} style={{ padding: "14px 24px", borderRadius: 12, background: "var(--bg3)", color: "var(--text2)", border: "1px solid var(--border)", cursor: "pointer", fontWeight: 600 }}>Cancel</button>
-            </div>
-          </form>
-        )}
-      </Modal>
-
-      {ConfirmDialog}
       {ToastContainer}
+      {ConfirmDialog}
     </div>
   );
 }

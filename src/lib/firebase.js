@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDmGhRW3CAIydXCKRTgrAh1xg2_t9-nhgI",
@@ -10,8 +15,18 @@ const firebaseConfig = {
   appId: "1:279998839455:web:fa71333bfb7ed33b4440aa"
 };
 
-// Initialize Firebase only if there are no existing initialized apps
 const app = !getApps().length ? initializeApp(firebaseConfig, "vcut_primary") : getApp("vcut_primary");
-const db = getFirestore(app);
+
+// Enable IndexedDB-backed cache so subsequent tab loads serve from local storage.
+// Snapshots resolve instantly from cache, then sync in the background.
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch {
+  // Already initialized (hot reload) or unsupported environment — fall back.
+  db = getFirestore(app);
+}
 
 export { app, db };

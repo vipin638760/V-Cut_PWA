@@ -42,7 +42,8 @@ export default function DashboardLayout({ children }) {
   const [context, setContext] = useState({ branches: [], staff: [] });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(false); // phone (<600px): sidebar always overlays, no pin
+  const [isTablet, setIsTablet] = useState(false); // phone + tablet (<900px): sidebar overlays by default
   const { confirm, ConfirmDialog } = useConfirm();
 
   const router   = useRouter();
@@ -50,11 +51,19 @@ export default function DashboardLayout({ children }) {
 
   // Track viewport width for responsive layout
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 900px)");
-    const update = () => setIsMobile(mq.matches);
+    const phoneMq = window.matchMedia("(max-width: 600px)");
+    const tabletMq = window.matchMedia("(max-width: 900px)");
+    const update = () => {
+      setIsMobile(phoneMq.matches);
+      setIsTablet(tabletMq.matches);
+    };
     update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    phoneMq.addEventListener("change", update);
+    tabletMq.addEventListener("change", update);
+    return () => {
+      phoneMq.removeEventListener("change", update);
+      tabletMq.removeEventListener("change", update);
+    };
   }, []);
 
   // Restore pin preference; default open on desktop only when pinned
@@ -71,10 +80,22 @@ export default function DashboardLayout({ children }) {
     });
   };
 
-  // Auto-close on route change when not pinned (or when on mobile)
+  // Auto-close on route change when not pinned (or when on phone — pin doesn't apply there)
   useEffect(() => {
     if (!sidebarPinned || isMobile) setSidebarOpen(false);
   }, [pathname, sidebarPinned, isMobile]);
+
+  const effectivelyPinned = sidebarPinned && !isMobile; // phones never stay pinned
+
+  // Prefetch the role's routes so clicking a nav item is instant
+  useEffect(() => {
+    if (!user) return;
+    const items = NAV[user.role] || [];
+    items.forEach(n => {
+      const href = n.id === "dashboard" ? "/dashboard" : `/dashboard/${n.id}`;
+      try { router.prefetch(href); } catch {}
+    });
+  }, [user, router]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vcut_user") || localStorage.getItem("vcut_user");
@@ -170,9 +191,9 @@ export default function DashboardLayout({ children }) {
 
       {/* ── Main Content ── */}
       <main style={{
-        marginLeft: sidebarPinned && !isMobile ? 260 : 0,
+        marginLeft: effectivelyPinned ? 260 : 0,
         flex: 1,
-        padding: isMobile ? "16px 14px" : "32px 48px",
+        padding: isTablet ? "16px 14px" : "32px 48px",
         maxWidth: 1600,
         width: "100%",
         boxSizing: "border-box",

@@ -296,3 +296,55 @@ input[type="date"]::-webkit-clear-button {
   background: var(--accent);
   background-clip: content-box;
 }
+
+/* ─── Responsive layout rules (≤900px) ─── */
+@media (max-width: 900px) {
+  /* Any wide table inside a card becomes horizontally scrollable */
+  table {
+    font-size: 12px !important;
+  }
+
+  /* Collapse 2/3-column grids to 1 column on narrow screens */
+  [style*="grid-template-columns: 1fr 1fr 1fr"],
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Reduce bulky paddings on cards */
+  .page-title {
+    font-size: 18px !important;
+  }
+
+  /* Stat cards should wrap full-width */
+  [style*="min-width: 180px"] {
+    min-width: 100% !important;
+  }
+}
+
+/* ─── Phone layout (≤600px) ─── */
+@media (max-width: 600px) {
+  html, body {
+    font-size: 14px;
+  }
+  table {
+    font-size: 11.5px !important;
+  }
+  /* Smaller headline font in mobile hero */
+  h1, h2, h3 {
+    letter-spacing: 0.5px !important;
+  }
+  /* Modals should be nearly full-screen on phones */
+  .modal-body, [role="dialog"] > div {
+    max-width: 94vw !important;
+  }
+}
+
+/* Prevent horizontal page overflow caused by wide inline content */
+body {
+  overflow-x: hidden;
+}
+/* Always allow tables/overflow containers to scroll horizontally */
+[style*="overflow-x: auto"] {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
