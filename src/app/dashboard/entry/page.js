@@ -100,7 +100,6 @@ export default function EntryPage() {
   // action buttons are not hidden during the first render pass.
   const roleKnown = !!currentUser?.role;
   const canEdit = !roleKnown || ["admin", "accountant"].includes(currentUser.role);
-  const isAdminUser = !roleKnown || currentUser.role === "admin";
 
   // Define handlers BEFORE any other function that references them.
   // (Turbopack/SWC production minifier does not reliably hoist `function` declarations,
@@ -1358,10 +1357,10 @@ export default function EntryPage() {
                     {e.cash_diff == null ? "—" : e.cash_diff === 0 ? "✓ Match" : e.cash_diff > 0 ? `▲ ${INR(e.cash_diff)}` : `▼ ${INR(Math.abs(e.cash_diff))}`}
                   </TD>
                   <TD right>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "nowrap" }}>
                       <IconBtn name="log" title="View log" variant="secondary" onClick={() => setLogView(e)} />
-                      {canEdit && <IconBtn name="edit" title="Edit entry" variant="secondary" onClick={() => handleEdit(e)} />}
-                      {isAdminUser && <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />}
+                      <IconBtn name="edit" title="Edit entry" variant="secondary" onClick={() => handleEdit(e)} />
+                      <IconBtn name="del" title="Delete entry" variant="danger" onClick={() => handleDelete(e.id)} />
                     </div>
                   </TD>
                 </tr>
