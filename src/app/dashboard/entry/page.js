@@ -30,41 +30,12 @@ const sumStaffBilling = (arr) => {
   return out;
 };
 
-const LUXURY_MENU = {
-  "Artistic Styling": [
-    { id: "cut_m", name: "Signature Haircut", price: 500, icon: "scissors" },
-    { id: "cut_w", name: "Artistic Layering", price: 1200, icon: "stars" },
-    { id: "beard", name: "Grooming Atelier (Beard)", price: 300, icon: "user" }
-  ],
-  "The Hair Spa": [
-    { id: "spa_r", name: "Ritual Revive", price: 1500, icon: "droplets" },
-    { id: "spa_d", name: "Deep Detox", price: 2000, icon: "wind" }
-  ],
-  "Color Lab": [
-    { id: "col_g", name: "Global Obsidian", price: 3500, icon: "palette" },
-    { id: "col_h", name: "High-Light Sculpting", price: 5000, icon: "sun" }
-  ],
-  "Dermacare Studio": [
-    { id: "fac_g", name: "Glass Skin Facial", price: 2500, icon: "circle" },
-    { id: "fac_l", name: "Luminous Glow", price: 4000, icon: "zap" }
-  ],
-  "Grooming Atelier": [
-    { id: "shave", name: "Royal Shave", price: 600, icon: "scissors" },
-    { id: "trim", name: "Signature Trim", price: 400, icon: "user" }
-  ]
-};
-
 const NOW = new Date();
 
 export default function EntryPage() {
   const { confirm, ConfirmDialog } = useConfirm();
   const { toast, ToastContainer } = useToast();
   const pendingTemplateRef = useRef(null);
-
-  // User & permissions — declared first so all dependent hooks/state can reference these
-  const currentUser = useCurrentUser() || {};
-  const canEdit = ["admin","accountant"].includes(currentUser?.role);
-  const isAdminUser = currentUser?.role === "admin";
 
   // Save file with native "Save As" dialog (browse folder + rename)
   const saveFileWithPicker = async (blob, suggestedName, toastTitle, toastMsg) => {
@@ -121,46 +92,16 @@ export default function EntryPage() {
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   
   // Track original values to allow updates to existing duplicates
-  const [clientSearch, setClientSearch] = useState("");
-  const [viewMode, setViewMode] = useState("pos"); // "pos" | "history"
-  const [activeCategory, setActiveCategory] = useState("Artistic Styling");
-  const [cart, setCart] = useState([]); // [{ id, name, price, staff_id }]
-
-  useEffect(() => {
-    console.info("POS Terminal mounted. View:", viewMode, "User role:", currentUser?.role);
-    if (!db) console.warn("Firebase DB not initialized!");
-  }, [viewMode, currentUser]);
-
-  const addToCart = (service) => {
-    setCart(prev => [...prev, { ...service, cartId: Math.random().toString(36).substr(2, 9), staff_id: "" }]);
-    toast({ title: "Added", message: `${service.name} added to cart`, type: "success" });
-  };
-
-  const removeFromCart = (cartId) => {
-    setCart(prev => prev.filter(item => item.cartId !== cartId));
-  };
-
-  const updateCartStaff = (cartId, staff_id) => {
-    setCart(prev => prev.map(item => item.cartId === cartId ? { ...item, staff_id } : item));
-    
-    // Auto-sync to staffRows for backend compatibility
-    if (staff_id) {
-      const item = cart.find(x => x.cartId === cartId);
-      if (item) {
-        setStaffRows(prev => {
-          const row = prev[staff_id] || { billing: 0, material: 0, tips: 0 };
-          return { ...prev, [staff_id]: { ...row, billing: (Number(row.billing) || 0) + Number(item.price) } };
-        });
-      }
-    }
-  };
-
   const [origBranch, setOrigBranch] = useState("");
   const [origDate, setOrigDate] = useState("");
 
+  const currentUser = useCurrentUser() || {};
+  const canEdit = ["admin","accountant"].includes(currentUser?.role);
+  const isAdminUser = currentUser?.role === "admin";
+
   // Define handlers BEFORE any other function that references them.
-  // (Turbopack/SWC minifier in production does not reliably hoist `function` declarations
-  // the way dev does, which caused a TDZ ReferenceError on the live site.)
+  // (Turbopack/SWC production minifier does not reliably hoist `function` declarations,
+  // which caused a "Cannot access 'eB' before initialization" TDZ error on the live site.)
   const handleEdit = (e) => {
     setEditId(e.id);
     setSelBranch(e.branch_id);
@@ -267,16 +208,11 @@ export default function EntryPage() {
   //     but keeps them available for days up to and including the exit date).
   const branchStaff = selBranch && selDate
     ? staff.filter(s => {
-        try {
-          if (effectiveBranchOnDate(s, selDate, transfers) !== selBranch) return false;
-          if (s.join && selDate < s.join) return false;
-          if (s.exit_date && selDate > s.exit_date) return false;
-          const mon = selDate.slice(0, 7);
-          return staffStatusForMonth(s, mon).status !== "inactive";
-        } catch (e) {
-          console.warn("Error filtering staff:", s.name, e);
-          return false;
-        }
+        if (effectiveBranchOnDate(s, selDate, transfers) !== selBranch) return false;
+        if (s.join && selDate < s.join) return false;
+        if (s.exit_date && selDate > s.exit_date) return false;
+        const mon = selDate.slice(0, 7);
+        return staffStatusForMonth(s, mon).status !== "inactive";
       })
     : [];
 
@@ -1081,137 +1017,11 @@ export default function EntryPage() {
 
   const inp = { padding: "8px 10px", border: "2px solid var(--input-border)", borderRadius: 8, fontSize: 14, background: "var(--bg3)", color: "var(--text)", fontFamily: "var(--font-outfit)", width: 90, textAlign: "right", transition: "border .2s", outline: "none" };
 
+  if (loading) return <div className="text-center text-[var(--gold)] p-10">Loading...</div>;
+
   return (
-    <div style={{ minHeight: "calc(100vh - 100px)", display: "flex", flexDirection: "column", gap: 16, position: "relative" }}>
-      {loading && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 16 }}>
-          <div style={{ color: "var(--accent)", fontWeight: 700, padding: "12px 24px", background: "var(--bg2)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-            ⚡ Connecting Terminal...
-          </div>
-        </div>
-      )}
-
+    <div>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, padding: "0 4px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ padding: 8, background: "var(--bg3)", borderRadius: 12, border: "1px solid var(--border)" }}>
-            <Icon name="scissors" size={24} color="var(--gold)" />
-          </div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)", letterSpacing: -0.5, lineHeight: 1 }}>V-CUT</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--gold)", textTransform: "uppercase", letterSpacing: 2, marginTop: 4 }}>Obsidian Atelier</div>
-          </div>
-        </div>
-        
-        <div style={{ display: "flex", gap: 8, background: "var(--bg3)", padding: 4, borderRadius: 12, border: "1px solid var(--border)" }}>
-          <button onClick={() => setViewMode("pos")} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, transition: "all .2s", cursor: "pointer", border: "none", background: viewMode === "pos" ? "var(--gold)" : "transparent", color: viewMode === "pos" ? "#000" : "var(--text3)" }}>
-            <Icon name="zap" size={14} style={{ marginRight: 6 }} /> Terminal
-          </button>
-          <button onClick={() => setViewMode("history")} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, transition: "all .2s", cursor: "pointer", border: "none", background: viewMode === "history" ? "var(--gold)" : "transparent", color: viewMode === "history" ? "#000" : "var(--text3)" }}>
-            <Icon name="log" size={14} style={{ marginRight: 6 }} /> History
-          </button>
-        </div>
-      </div>
-
-      {viewMode === "pos" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, flex: 1, minHeight: 0 }}>
-          {/* Menu Area */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Client Search */}
-            <div style={{ background: "var(--bg2)", padding: 16, borderRadius: 16, border: "1px solid var(--border)", display: "flex", gap: 12, alignItems: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-              <div style={{ padding: 10, background: "var(--bg3)", borderRadius: 10, color: "var(--gold)" }}>
-                <Icon name="user" size={20} />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Find Client by Phone or Name..." 
-                value={clientSearch}
-                onChange={e => setClientSearch(e.target.value)}
-                style={{ flex: 1, background: "transparent", border: "none", color: "var(--text)", fontSize: 16, fontWeight: 600, outline: "none" }}
-              />
-              <button style={{ padding: "8px 16px", borderRadius: 10, background: "var(--gold)", color: "#000", fontWeight: 700, fontSize: 13, border: "none" }}>Walk-In</button>
-            </div>
-
-            {/* Service Grid */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                {Object.keys(LUXURY_MENU).map(cat => (
-                  <button key={cat} onClick={() => setActiveCategory(cat)} 
-                    style={{ padding: "10px 18px", borderRadius: 12, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", border: "1px solid var(--border)", cursor: "pointer", background: activeCategory === cat ? "var(--gold2)" : "var(--bg2)", color: activeCategory === cat ? "#000" : "var(--text2)", transition: "all .2s" }}>
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-                {LUXURY_MENU[activeCategory].map(item => (
-                  <div key={item.id} onClick={() => addToCart(item)}
-                    style={{ background: "var(--bg2)", padding: 20, borderRadius: 16, border: "1px solid var(--border)", cursor: "pointer", transition: "all .2s", position: "relative", overflow: "hidden" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--gold)"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
-                    <div style={{ position: "absolute", top: -10, right: -10, opacity: 0.1 }}>
-                      <Icon name={item.icon} size={64} />
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>{item.name}</div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--gold)" }}>{INR(item.price)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Checkout Sidebar */}
-          <div style={{ background: "var(--bg2)", border: "2px solid var(--border)", borderRadius: 24, display: "flex", flexDirection: "column", overflow: "hidden", position: "sticky", top: 0, height: "calc(100vh - 120px)", boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}>
-            <div style={{ padding: 24, borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--gold)", letterSpacing: 1 }}>CART</div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text3)" }}>{cart.length} ITEMS</div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-              {cart.map(item => (
-                <div key={item.cartId} style={{ background: "var(--bg3)", padding: 16, borderRadius: 16, border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name}</div>
-                    <button onClick={() => removeFromCart(item.cartId)} style={{ color: "var(--red)", background: "transparent", border: "none", cursor: "pointer" }}>
-                      <Icon name="del" size={14} />
-                    </button>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <select value={item.staff_id} onChange={e => updateCartStaff(item.cartId, e.target.value)}
-                      style={{ flex: 1, padding: "8px 10px", borderRadius: 8, background: "var(--bg2)", color: "var(--text)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 600 }}>
-                      <option value="">Assign Artist...</option>
-                      {branchStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <div style={{ fontWeight: 800, color: "var(--gold)" }}>{INR(item.price)}</div>
-                  </div>
-                </div>
-              ))}
-              {cart.length === 0 && (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, opacity: 0.3 }}>
-                  <Icon name="plus" size={48} />
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>Cart is empty</div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: 24, background: "var(--bg3)", borderTop: "2px solid var(--border)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 14, color: "var(--text3)", fontWeight: 600 }}>Subtotal</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{INR(cart.reduce((s, i) => s + i.price, 0))}</div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)" }}>Total</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: "var(--green)" }}>{INR(cart.reduce((s, i) => s + i.price, 0))}</div>
-              </div>
-              <button disabled={cart.length === 0} onClick={handleSave}
-                style={{ width: "100%", padding: 18, borderRadius: 16, background: "linear-gradient(135deg, var(--gold), #fb923c)", color: "#000", border: "none", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 10px 20px rgba(212,175,55,0.3)", opacity: cart.length === 0 ? 0.5 : 1 }}>
-                COLLECT PAYMENT
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "var(--gold)", letterSpacing: 1 }}>Data Entry</div>
       </div>
@@ -1733,8 +1543,6 @@ export default function EntryPage() {
 
       {ConfirmDialog}
       {ToastContainer}
-        </>
-      )}
     </div>
   );
 }
