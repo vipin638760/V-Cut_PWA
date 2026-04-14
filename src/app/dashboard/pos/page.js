@@ -209,28 +209,10 @@ export default function POSPage() {
     }));
   };
 
-  const handleEntriesSn = (sn) => {
-    const entriesList = sn.docs.map(d => ({ ...d.data(), id: d.id }));
-    setEntries(entriesList);
-    setLoading(false);
-
-    try {
-      if (typeof window !== "undefined" && !editId) {
-        const params = new URLSearchParams(window.location.search);
-        const editQuery = params.get("edit");
-        if (editQuery && sn.docs.length > 0) {
-          const e = sn.docs.map(d => ({ ...d.data(), id: d.id })).find(x => x.id === editQuery);
-          if (e) handleEdit(e);
-          // Clear current URL query
-          const newUrl = window.location.pathname;
-          window.history.replaceState({}, "", newUrl);
-        }
-      }
-    } catch (err) { console.error("Edit query error", err); }
-  };
-
-  // Define these as standard functions so they are hoisted safely
-  function handleEdit(e) {
+  // Define handlers BEFORE any other function that references them.
+  // (Turbopack/SWC minifier in production does not reliably hoist `function` declarations
+  // the way dev does, which caused a TDZ ReferenceError on the live site.)
+  const handleEdit = (e) => {
     setEditId(e.id);
     setSelBranch(e.branch_id);
     setSelDate(e.date);
@@ -261,10 +243,10 @@ export default function POSPage() {
       });
     }
     setStaffRows(rows);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  function handleDelete(eid) {
+  const handleDelete = (eid) => {
     confirm({
       title: "Delete Entry",
       message: "Are you sure you want to <strong>permanently delete</strong> this entry? This action cannot be undone.",
@@ -279,7 +261,27 @@ export default function POSPage() {
         } catch (err) { confirm({ title: "Error", message: err.message, confirmText: "OK", cancelText: "Close", type: "danger", onConfirm: () => {} }); }
       }
     });
-  }
+  };
+
+  const handleEntriesSn = (sn) => {
+    const entriesList = sn.docs.map(d => ({ ...d.data(), id: d.id }));
+    setEntries(entriesList);
+    setLoading(false);
+
+    try {
+      if (typeof window !== "undefined" && !editId) {
+        const params = new URLSearchParams(window.location.search);
+        const editQuery = params.get("edit");
+        if (editQuery && sn.docs.length > 0) {
+          const e = sn.docs.map(d => ({ ...d.data(), id: d.id })).find(x => x.id === editQuery);
+          if (e) handleEdit(e);
+          // Clear current URL query
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, "", newUrl);
+        }
+      }
+    } catch (err) { console.error("Edit query error", err); }
+  };
 
   useEffect(() => {
     if (!db) return;

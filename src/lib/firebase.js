@@ -19,14 +19,19 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig, "vcut_primary") : getApp("vcut_primary");
 
 // Enable IndexedDB-backed cache so subsequent tab loads serve from local storage.
-// Snapshots resolve instantly from cache, then sync in the background.
+// Only in the browser — Node / SSR / build-time prerender has no IndexedDB and would throw.
 let db;
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
-} catch {
-  // Already initialized (hot reload) or unsupported environment — fall back.
+const isBrowser = typeof window !== "undefined" && typeof indexedDB !== "undefined";
+if (isBrowser) {
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    // Already initialized (hot reload) or unsupported (e.g. private mode) — fall back.
+    db = getFirestore(app);
+  }
+} else {
   db = getFirestore(app);
 }
 
