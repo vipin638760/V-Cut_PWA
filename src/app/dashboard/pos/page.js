@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, useRef, useMemo } from "react";
-import { collection, onSnapshot, query, orderBy, limit, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { useEffect, useState, useRef, useMemo, startTransition } from "react";
+import { collection, onSnapshot, query, orderBy, where, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/currentUser";
 import { INR } from "@/lib/calculations";
@@ -283,27 +283,53 @@ export default function POSPage() {
     } catch (err) { console.error("Edit query error", err); }
   };
 
+  // Stable subscriptions (branches, staff, transfers, customers, menus, settings).
   useEffect(() => {
     if (!db) return;
+    const wrap = (setter) => (sn) => startTransition(() => setter(sn.docs.map(d => ({ ...d.data(), id: d.id }))));
     const unsubs = [
-      onSnapshot(collection(db, "branches"), sn => setBranches(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(collection(db, "staff"), sn => setStaff(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(collection(db, "staff_transfers"), sn => setTransfers(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(collection(db, "customers"), sn => setCustomers(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(collection(db, "menus"), sn => setMenus(sn.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(query(collection(db, "entries"), orderBy("date", "desc"), limit(2000)), handleEntriesSn),
+      onSnapshot(collection(db, "branches"), wrap(setBranches)),
+      onSnapshot(collection(db, "staff"), wrap(setStaff)),
+      onSnapshot(collection(db, "staff_transfers"), wrap(setTransfers)),
+      onSnapshot(collection(db, "customers"), wrap(setCustomers)),
+      onSnapshot(collection(db, "menus"), wrap(setMenus)),
       onSnapshot(doc(db, "settings", "global"), sn => {
-        if (sn.exists()) {
-           const data = sn.data();
-           setGlobalSettings(data);
-           const rate = data.gst_pct?.toString() || "5";
-           setGlobalGst(rate);
-           setGstPct(prev => editId ? prev : rate);
-        }
-      })
+        if (!sn.exists()) return;
+        const data = sn.data();
+        startTransition(() => {
+          setGlobalSettings(data);
+          const rate = data.gst_pct?.toString() || "5";
+          setGlobalGst(rate);
+        });
+      }),
     ];
     return () => unsubs.forEach(u => u());
-  }, [editId]);
+  }, []);
+
+  useEffect(() => {
+    if (!editId) setGstPct(globalGst);
+  }, [globalGst, editId]);
+
+  // Entries subscription scoped to current filter period (month or year).
+  useEffect(() => {
+    if (!db) return;
+    let from, to;
+    if (filterMode === "month") {
+      from = `${filterPrefix}-01`;
+      to   = `${filterPrefix}-31`;
+    } else {
+      from = `${filterYear}-01-01`;
+      to   = `${filterYear}-12-31`;
+    }
+    const q = query(
+      collection(db, "entries"),
+      where("date", ">=", from),
+      where("date", "<=", to),
+      orderBy("date", "desc"),
+    );
+    const unsub = onSnapshot(q, (sn) => startTransition(() => handleEntriesSn(sn)));
+    return () => unsub();
+  }, [filterMode, filterPrefix, filterYear]);
 
   // Branch lookup — memoized so per-row resolution in tables/exports is O(1) instead of O(n).
   const branchesById = useMemo(() => {
