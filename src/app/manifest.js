@@ -1,0 +1,18 @@
+export default function manifest() {
+  return {
+    name: "V-CUT Group — Management System",
+    short_name: "V-CUT",
+    description: "V-Cut Salon Management System",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "portrait-primary",
+    background_color: "#0a0a0a",
+    theme_color: "#0a0a0a",
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
+    ],
+  };
+}

@@ -1,5 +1,6 @@
 import { Outfit, Great_Vibes, Space_Grotesk, Manrope } from "next/font/google";
 import "./globals.css";
+import PWARegister from "@/components/PWARegister";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -28,12 +29,27 @@ const manrope = Manrope({
 export const metadata = {
   title: "V-CUT Group — Management System",
   description: "Salon Management System",
+  applicationName: "V-CUT",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "V-CUT",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({ children }) {
@@ -48,6 +64,7 @@ export default function RootLayout({ children }) {
           <span style={{ color: "var(--text)", fontFamily: "var(--font-vibes)", fontWeight: 400, fontSize: "1.2em" }}>-Cut</span>
         </div>
         {children}
+        <PWARegister />
       </body>
     </html>
   );
